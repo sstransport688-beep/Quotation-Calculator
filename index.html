@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SS Transport Quotation V2R01</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background: white;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.5em;
+            line-height: 1.3;
+        }
+        h1 img {
+            height: 1.5em;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        .version {
+            text-align: center;
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 20px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-group input {
+            width: auto;
+        }
+        .checkbox-group label {
+            font-weight: normal;
+        }
+        .btn-calculate {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 5px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .btn-download {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .total-box {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 20px;
+            text-align: center;
+            margin-top: 20px;
+            font-weight: bold;
+            border: 1px solid #ddd;
+        }
+        .waiting-warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 15px;
+            text-align: center;
+            color: #856404;
+            font-size: 15px;
+        }
+        /* Upload area (only in builder, but will be removed in embedded version) */
+        .upload-area {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .image-preview {
+            max-width: 100px;
+            max-height: 100px;
+            margin-top: 10px;
+            display: inline-block;
+        }
+        .btn-embed {
+            background: #6f42c1;
+            color: white;
+            border: none;
+            padding: 10px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 5px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        /* Admin panel hidden by default */
+        .admin-panel {
+            display: none;
+            margin-top: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 2px solid #6c757d;
+            border-radius: 8px;
+        }
+        .admin-panel h3 {
+            margin-top: 0;
+            text-align: center;
+        }
+        .admin-row {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .admin-row label {
+            width: 180px;
+            font-size: 14px;
+        }
+        .admin-row input {
+            width: 120px;
+            padding: 6px;
+            font-size: 14px;
+        }
+        .admin-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        hr {
+            margin: 20px 0;
+        }
+        .status-msg {
+            margin-top: 8px;
+            font-size: 13px;
+            color: green;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ========== UPLOAD SECTION (BUILDER ONLY) ========== -->
+    <div class="upload-area" id="uploadArea">
+        <label for="imageUpload">Upload your image (PNG/JPG) - will be embedded in the final file</label>
+        <input type="file" id="imageUpload" accept="image/png,image/jpeg,image/jpg">
+        <div id="imagePreview" class="image-preview"></div>
+        <button class="btn-embed" id="createEmbedBtn">📸 Create embed image quotation (download new HTML)</button>
+        <div id="statusMsg" class="status-msg"></div>
+        <small>After uploading, click button to generate a new HTML file with your image permanently embedded. That file has no upload UI.</small>
+    </div>
+    <hr>
+
+    <!-- ========== QUOTATION TOOL (same as final embedded version) ========== -->
+    <h1>
+        <img id="currentLogo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%23666'%3E%3Ctext x='2' y='20' font-size='20'%3ESS%3C/text%3E%3C/svg%3E" alt="SS">
+        SS Transport Quotation
+    </h1>
+    <div class="version" id="versionClick">V2R01</div>
+
+    <div class="form-group">
+        <label for="vehicleType">Select Your Vehicle</label>
+        <select id="vehicleType">
+            <option value="10ft">10ft Lorry</option>
+            <option value="14ft">14ft Lorry</option>
+            <option value="17ft">17ft Lorry</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="distance">Pickup – Drop Distance (km)</label>
+        <input type="number" id="distance" placeholder="Enter distance in km" min="1" step="any">
+    </div>
+
+    <div class="form-group">
+        <label for="pickupDateTime">Date / Time to Pickup</label>
+        <input type="datetime-local" id="pickupDateTime">
+    </div>
+
+    <div class="form-group">
+        <label for="helpers">Need How Many Helpers?</label>
+        <input type="number" id="helpers" value="0" min="0" step="1">
+        <small style="color:#666;">RM<span id="helperRateDisplay">100</span> per helper</small>
+    </div>
+
+    <div class="form-group">
+        <div class="checkbox-group">
+            <input type="checkbox" id="tailgate">
+            <label for="tailgate">Need Tailgate? (+RM<span id="tailgateRateDisplay">100</span>)</label>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="dropPoints">How Many Drop Points?</label>
+        <input type="number" id="dropPoints" value="1" min="1" step="1">
+        <small style="color:#666;">First drop included, extra drops RM<span id="extraDropRateDisplay">30</span> each</small>
+    </div>
+
+    <button class="btn-calculate" onclick="calculateFare()">Calculate Total Price</button>
+    <div class="total-box" id="totalDisplay">RM 0.00</div>
+    <div class="waiting-warning">⚠️ A waiting fee will be charged for any delay exceeding 30 minutes.</div>
+    <button class="btn-download" id="downloadBtn" style="display: none;" onclick="downloadSummary()">📥 Download Quotation (PDF)</button>
+
+    <!-- Hidden Admin Panel (appears after 5 clicks on version) -->
+    <div id="adminPanel" class="admin-panel">
+        <h3>Admin Rate Configuration</h3>
+        <div id="adminFields"></div>
+        <button class="admin-btn" id="saveRatesBtn">Save & Reload</button>
+        <button class="admin-btn" id="resetDefaultBtn">Reset to Defaults</button>
+    </div>
+
+    <script>
+        // ===================== DEFAULT RATES (V2R01) =====================
+        const DEFAULT_RATES = {
+            vehicleRates: {
+                "10ft": { baseKm: 10, basePrice: 120, extraTiers: [ { upTo: 60, rate: 5.00 }, { upTo: 100, rate: 4.50 }, { upTo: 150, rate: 4.00 }, { upTo: Infinity, rate: 3.50 } ] },
+                "14ft": { baseKm: 5, basePrice: 200, extraTiers: [ { upTo: 60, rate: 6.00 }, { upTo: 150, rate: 4.50 }, { upTo: Infinity, rate: 4.00 } ] },
+                "17ft": { baseKm: 5, basePrice: 240, extraTiers: [ { upTo: 60, rate: 6.00 }, { upTo: 150, rate: 5.00 }, { upTo: Infinity, rate: 4.00 } ] }
+            },
+            helperPrice: 100,
+            tailgatePrice: 100,
+            extraDropPrice: 30,
+            lateNightMultiplier: 1.6,
+            lateNightStartHour: 22,
+            lateNightEndHour: 7,
+            rushHourSurcharges: { "10ft": 20, "14ft": 30, "17ft": 30 },
+            rushMorningStart: { hour: 7, minute: 30 },
+            rushMorningEnd: { hour: 9, minute: 45 },
+            rushAfternoonStart: { hour: 16, minute: 30 },
+            rushAfternoonEnd: { hour: 19, minute: 0 }
+        };
+
+        // Load saved rates from localStorage
+        let currentRates = JSON.parse(localStorage.getItem('ss_transport_rates'));
+        if (!currentRates) {
+            currentRates = JSON.parse(JSON.stringify(DEFAULT_RATES));
+        }
+
+        function updateRateDisplays() {
+            document.getElementById('helperRateDisplay').innerText = currentRates.helperPrice;
+            document.getElementById('tailgateRateDisplay').innerText = currentRates.tailgatePrice;
+            document.getElementById('extraDropRateDisplay').innerText = currentRates.extraDropPrice;
+        }
+
+        function isRushHour(pickupDate) {
+            if (!pickupDate) return false;
+            const minutes = pickupDate.getHours() * 60 + pickupDate.getMinutes();
+            const morningStart = currentRates.rushMorningStart.hour * 60 + currentRates.rushMorningStart.minute;
+            const morningEnd = currentRates.rushMorningEnd.hour * 60 + currentRates.rushMorningEnd.minute;
+            const afternoonStart = currentRates.rushAfternoonStart.hour * 60 + currentRates.rushAfternoonStart.minute;
+            const afternoonEnd = currentRates.rushAfternoonEnd.hour * 60 + currentRates.rushAfternoonEnd.minute;
+            return (minutes >= morningStart && minutes <= morningEnd) || (minutes >= afternoonStart && minutes <= afternoonEnd);
+        }
+
+        function getRushHourSurcharge(vehicle, pickupDate) {
+            if (!isRushHour(pickupDate)) return 0;
+            return currentRates.rushHourSurcharges[vehicle] || 0;
+        }
+
+        function isLateNight(pickupDate) {
+            if (!pickupDate) return false;
+            const hour = pickupDate.getHours();
+            return hour >= currentRates.lateNightStartHour || hour < currentRates.lateNightEndHour;
+        }
+
+        function calculateDistanceFare(vehicle, distance) {
+            const config = currentRates.vehicleRates[vehicle];
+            if (!config) return 0;
+            if (distance <= config.baseKm) return config.basePrice;
+            const extra = distance - config.baseKm;
+            let rate = 0;
+            for (const tier of config.extraTiers) {
+                if (distance <= tier.upTo) { rate = tier.rate; break; }
+            }
+            return config.basePrice + extra * rate;
+        }
+
+        let lastCalc = null;
+
+        function calculateFare() {
+            const vehicle = document.getElementById('vehicleType').value;
+            const distance = parseFloat(document.getElementById('distance').value);
+            const pickupStr = document.getElementById('pickupDateTime').value;
+            const helpers = parseInt(document.getElementById('helpers').value) || 0;
+            const tailgate = document.getElementById('tailgate').checked;
+            const dropPoints = parseInt(document.getElementById('dropPoints').value) || 1;
+
+            if (isNaN(distance) || distance <= 0) {
+                alert('Please enter a valid distance.');
+                lastCalc = null;
+                document.getElementById('downloadBtn').style.display = 'none';
+                return;
+            }
+
+            let fare = calculateDistanceFare(vehicle, distance);
+            let lateNight = false, pickupDate = null;
+            if (pickupStr) {
+                pickupDate = new Date(pickupStr);
+                if (!isNaN(pickupDate)) lateNight = isLateNight(pickupDate);
+            }
+            if (lateNight) fare *= currentRates.lateNightMultiplier;
+            let rush = 0;
+            if (pickupDate && !lateNight) rush = getRushHourSurcharge(vehicle, pickupDate);
+
+            const helperCost = helpers * currentRates.helperPrice;
+            const tailgateCost = tailgate ? currentRates.tailgatePrice : 0;
+            const extraDropCost = Math.max(0, dropPoints - 1) * currentRates.extraDropPrice;
+            const total = fare + helperCost + tailgateCost + extraDropCost + rush;
+            document.getElementById('totalDisplay').innerHTML = `RM ${total.toFixed(2)}`;
+            lastCalc = { vehicle, distance, pickupStr, helpers, tailgate, dropPoints, lateNight, rush, total };
+            document.getElementById('downloadBtn').style.display = 'block';
+        }
+
+        function downloadSummary() {
+            if (!lastCalc) { alert('Calculate fare first.'); return; }
+            const d = lastCalc;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFillColor(0, 123, 255); doc.rect(0, 0, 210, 25, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setTextColor(255,255,255); doc.setFontSize(20);
+            doc.text('Lorry Fare Quotation', 105, 16, { align: 'center' });
+            doc.setTextColor(0,0,0); doc.setFontSize(13); doc.setFont('helvetica', 'normal');
+            let y = 40;
+            const addRow = (label, val) => {
+                doc.setFont('helvetica', 'bold'); doc.text(label, 25, y);
+                doc.setFont('helvetica', 'normal'); doc.text(val, 120, y);
+                y += 11;
+            };
+            addRow('Vehicle:', d.vehicle + ' Lorry');
+            addRow('Distance:', d.distance + ' km');
+            addRow('Pickup Date/Time:', d.pickupStr ? new Date(d.pickupStr).toLocaleString() : 'Not specified');
+            addRow('Helpers:', d.helpers.toString());
+            addRow('Tailgate:', d.tailgate ? 'Yes' : 'No');
+            addRow('Drop Points:', d.dropPoints.toString());
+            y += 8;
+            doc.setFillColor(240,240,240); doc.rect(20, y-6, 160, 14, 'F');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+            doc.text('TOTAL:', 25, y);
+            doc.text(`RM ${d.total.toFixed(2)}`, 120, y);
+            doc.setFontSize(9); doc.setFont('helvetica', 'italic'); doc.setTextColor(100,100,100);
+            doc.text('Waiting fee charged for delays exceeding 30 minutes.', 105, 280, { align: 'center' });
+            doc.save('quotation_summary.pdf');
+        }
+
+        // ==================== ADMIN PANEL ====================
+        let clickCount = 0, clickTimer = null;
+        const versionDiv = document.getElementById('versionClick');
+        const adminPanel = document.getElementById('adminPanel');
+        versionDiv.addEventListener('click', () => {
+            clickCount++;
+            if (clickTimer) clearTimeout(clickTimer);
+            clickTimer = setTimeout(() => { clickCount = 0; }, 1000);
+            if (clickCount >= 5) {
+                adminPanel.style.display = 'block';
+                renderAdminFields();
+                clickCount = 0;
+            }
+        });
+
+        function renderAdminFields() {
+            const container = document.getElementById('adminFields');
+            if (!container) return;
+            let html = `<div class="admin-row"><strong>Vehicle Rates</strong></div>`;
+            for (const [veh, data] of Object.entries(currentRates.vehicleRates)) {
+                html += `<div class="admin-row"><label>${veh} Base Km:</label><input type="number" id="baseKm_${veh}" value="${data.baseKm}" step="1"></div>`;
+                html += `<div class="admin-row"><label>${veh} Base Price (RM):</label><input type="number" id="basePrice_${veh}" value="${data.basePrice}" step="1"></div>`;
+                data.extraTiers.forEach((tier, idx) => {
+                    const upToVal = tier.upTo === Infinity ? '9999' : tier.upTo;
+                    html += `<div class="admin-row"><label>${veh} Tier ${idx+1} (up to km):</label><input type="number" id="tierUpTo_${veh}_${idx}" value="${upToVal}" step="1"></div>`;
+                    html += `<div class="admin-row"><label>${veh} Tier ${idx+1} rate (RM/km):</label><input type="number" id="tierRate_${veh}_${idx}" value="${tier.rate}" step="0.5"></div>`;
+                });
+            }
+            html += `<div class="admin-row"><label>Helper Price (RM):</label><input type="number" id="helperPrice" value="${currentRates.helperPrice}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Tailgate Price (RM):</label><input type="number" id="tailgatePrice" value="${currentRates.tailgatePrice}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Extra Drop Price (RM):</label><input type="number" id="extraDropPrice" value="${currentRates.extraDropPrice}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Late Night Multiplier (x):</label><input type="number" id="lateNightMultiplier" value="${currentRates.lateNightMultiplier}" step="0.1"></div>`;
+            html += `<div class="admin-row"><label>Late Night Start Hour:</label><input type="number" id="lateNightStartHour" value="${currentRates.lateNightStartHour}" step="1" min="0" max="23"></div>`;
+            html += `<div class="admin-row"><label>Late Night End Hour:</label><input type="number" id="lateNightEndHour" value="${currentRates.lateNightEndHour}" step="1" min="0" max="23"></div>`;
+            html += `<div class="admin-row"><label>Rush Hour 10ft (RM):</label><input type="number" id="rush10ft" value="${currentRates.rushHourSurcharges['10ft']}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Rush Hour 14ft (RM):</label><input type="number" id="rush14ft" value="${currentRates.rushHourSurcharges['14ft']}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Rush Hour 17ft (RM):</label><input type="number" id="rush17ft" value="${currentRates.rushHourSurcharges['17ft']}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Morning Rush Start (HH:MM):</label><input type="text" id="morningStart" value="${String(currentRates.rushMorningStart.hour).padStart(2,'0')}:${String(currentRates.rushMorningStart.minute).padStart(2,'0')}"></div>`;
+            html += `<div class="admin-row"><label>Morning Rush End (HH:MM):</label><input type="text" id="morningEnd" value="${String(currentRates.rushMorningEnd.hour).padStart(2,'0')}:${String(currentRates.rushMorningEnd.minute).padStart(2,'0')}"></div>`;
+            html += `<div class="admin-row"><label>Afternoon Rush Start (HH:MM):</label><input type="text" id="afternoonStart" value="${String(currentRates.rushAfternoonStart.hour).padStart(2,'0')}:${String(currentRates.rushAfternoonStart.minute).padStart(2,'0')}"></div>`;
+            html += `<div class="admin-row"><label>Afternoon Rush End (HH:MM):</label><input type="text" id="afternoonEnd" value="${String(currentRates.rushAfternoonEnd.hour).padStart(2,'0')}:${String(currentRates.rushAfternoonEnd.minute).padStart(2,'0')}"></div>`;
+            container.innerHTML = html;
+        }
+
+        function collectRatesFromForm() {
+            const newRates = JSON.parse(JSON.stringify(DEFAULT_RATES));
+            for (const veh of ['10ft','14ft','17ft']) {
+                const baseKm = parseFloat(document.getElementById(`baseKm_${veh}`).value);
+                const basePrice = parseFloat(document.getElementById(`basePrice_${veh}`).value);
+                if (!isNaN(baseKm)) newRates.vehicleRates[veh].baseKm = baseKm;
+                if (!isNaN(basePrice)) newRates.vehicleRates[veh].basePrice = basePrice;
+                const tiers = [];
+                let idx = 0;
+                while (true) {
+                    const upToInput = document.getElementById(`tierUpTo_${veh}_${idx}`);
+                    const rateInput = document.getElementById(`tierRate_${veh}_${idx}`);
+                    if (!upToInput || !rateInput) break;
+                    let upTo = parseFloat(upToInput.value);
+                    const rate = parseFloat(rateInput.value);
+                    if (isNaN(rate)) break;
+                    if (isNaN(upTo)) upTo = Infinity;
+                    tiers.push({ upTo: upTo === 9999 ? Infinity : upTo, rate });
+                    idx++;
+                }
+                if (tiers.length) newRates.vehicleRates[veh].extraTiers = tiers;
+            }
+            const helperPrice = parseFloat(document.getElementById('helperPrice').value);
+            if (!isNaN(helperPrice)) newRates.helperPrice = helperPrice;
+            const tailgatePrice = parseFloat(document.getElementById('tailgatePrice').value);
+            if (!isNaN(tailgatePrice)) newRates.tailgatePrice = tailgatePrice;
+            const extraDropPrice = parseFloat(document.getElementById('extraDropPrice').value);
+            if (!isNaN(extraDropPrice)) newRates.extraDropPrice = extraDropPrice;
+            const lateNightMultiplier = parseFloat(document.getElementById('lateNightMultiplier').value);
+            if (!isNaN(lateNightMultiplier)) newRates.lateNightMultiplier = lateNightMultiplier;
+            const lateNightStartHour = parseInt(document.getElementById('lateNightStartHour').value);
+            if (!isNaN(lateNightStartHour)) newRates.lateNightStartHour = lateNightStartHour;
+            const lateNightEndHour = parseInt(document.getElementById('lateNightEndHour').value);
+            if (!isNaN(lateNightEndHour)) newRates.lateNightEndHour = lateNightEndHour;
+            const rush10ft = parseFloat(document.getElementById('rush10ft').value);
+            if (!isNaN(rush10ft)) newRates.rushHourSurcharges['10ft'] = rush10ft;
+            const rush14ft = parseFloat(document.getElementById('rush14ft').value);
+            if (!isNaN(rush14ft)) newRates.rushHourSurcharges['14ft'] = rush14ft;
+            const rush17ft = parseFloat(document.getElementById('rush17ft').value);
+            if (!isNaN(rush17ft)) newRates.rushHourSurcharges['17ft'] = rush17ft;
+
+            function parseTime(str) {
+                const parts = str.split(':');
+                if (parts.length !== 2) return null;
+                const hour = parseInt(parts[0]), minute = parseInt(parts[1]);
+                if (isNaN(hour) || isNaN(minute)) return null;
+                return { hour, minute };
+            }
+            const morningStart = parseTime(document.getElementById('morningStart').value);
+            if (morningStart) newRates.rushMorningStart = morningStart;
+            const morningEnd = parseTime(document.getElementById('morningEnd').value);
+            if (morningEnd) newRates.rushMorningEnd = morningEnd;
+            const afternoonStart = parseTime(document.getElementById('afternoonStart').value);
+            if (afternoonStart) newRates.rushAfternoonStart = afternoonStart;
+            const afternoonEnd = parseTime(document.getElementById('afternoonEnd').value);
+            if (afternoonEnd) newRates.rushAfternoonEnd = afternoonEnd;
+            return newRates;
+        }
+
+        document.getElementById('saveRatesBtn').addEventListener('click', () => {
+            const newRates = collectRatesFromForm();
+            localStorage.setItem('ss_transport_rates', JSON.stringify(newRates));
+            alert('Rates saved. Page will reload to apply changes.');
+            location.reload();
+        });
+        document.getElementById('resetDefaultBtn').addEventListener('click', () => {
+            if (confirm('Reset all rates to factory defaults?')) {
+                localStorage.removeItem('ss_transport_rates');
+                location.reload();
+            }
+        });
+
+        updateRateDisplays();
+
+        // ==================== EMBED IMAGE GENERATION ====================
+        const fileInput = document.getElementById('imageUpload');
+        const previewDiv = document.getElementById('imagePreview');
+        const currentLogo = document.getElementById('currentLogo');
+        const createBtn = document.getElementById('createEmbedBtn');
+        const statusSpan = document.getElementById('statusMsg');
+
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                const dataUrl = ev.target.result;
+                previewDiv.innerHTML = `<img src="${dataUrl}" style="max-width:100px; max-height:100px;">`;
+                currentLogo.src = dataUrl;
+                statusSpan.innerHTML = 'Image loaded. Ready to create embedded version.';
+            };
+            reader.readAsDataURL(file);
+        });
+
+        createBtn.addEventListener('click', function() {
+            if (!fileInput.files || !fileInput.files[0]) {
+                alert('Please upload an image first.');
+                return;
+            }
+            statusSpan.innerHTML = 'Generating HTML...';
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                const base64Image = ev.target.result;
+                const finalHtml = generateStandaloneHtml(base64Image);
+                const blob = new Blob([finalHtml], { type: 'text/html' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.href = url;
+                link.download = 'SS_Transport_Quotation_Embedded.html';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                statusSpan.innerHTML = '✅ Embedded HTML file downloaded! It contains your image and no upload UI.';
+                setTimeout(() => { statusSpan.innerHTML = ''; }, 5000);
+            };
+            reader.readAsDataURL(fileInput.files[0]);
+        });
+
+        function generateStandaloneHtml(imgBase64) {
+            const ratesJson = JSON.stringify(currentRates);
+            return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SS Transport Quotation V2R01</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; max-width: 500px; margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; background: white; }
+        h1 { text-align: center; margin-bottom: 10px; font-size: 1.5em; }
+        h1 img { height: 1.5em; vertical-align: middle; margin-right: 8px; }
+        .version { text-align: center; font-size: 0.8em; color: #666; margin-bottom: 20px; cursor: pointer; user-select: none; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 5px; }
+        .checkbox-group { display: flex; align-items: center; gap: 8px; }
+        .checkbox-group input { width: auto; }
+        .checkbox-group label { font-weight: normal; }
+        .btn-calculate { background: #007bff; color: white; border: none; padding: 12px; font-size: 18px; cursor: pointer; border-radius: 5px; width: 100%; margin-top: 10px; }
+        .btn-download { background: #28a745; color: white; border: none; padding: 12px; font-size: 16px; cursor: pointer; border-radius: 5px; width: 100%; margin-top: 10px; }
+        .total-box { background: #f9f9f9; padding: 15px; border-radius: 8px; font-size: 20px; text-align: center; margin-top: 20px; font-weight: bold; border: 1px solid #ddd; }
+        .waiting-warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 12px; margin-top: 15px; text-align: center; color: #856404; }
+        .admin-panel { display: none; margin-top: 30px; padding: 15px; background: #f8f9fa; border: 2px solid #6c757d; border-radius: 8px; }
+        .admin-panel h3 { margin-top: 0; text-align: center; }
+        .admin-row { margin-bottom: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .admin-row label { width: 180px; font-size: 14px; }
+        .admin-row input { width: 120px; padding: 6px; font-size: 14px; }
+        .admin-btn { background: #6c757d; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 5px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1><img src="${imgBase64}" alt="Company" style="height:1.5em; vertical-align:middle; margin-right:8px;"> SS Transport Quotation</h1>
+    <div class="version" id="versionClick">V2R01</div>
+
+    <div class="form-group"><label for="vehicleType">Select Your Vehicle</label><select id="vehicleType"><option value="10ft">10ft Lorry</option><option value="14ft">14ft Lorry</option><option value="17ft">17ft Lorry</option></select></div>
+    <div class="form-group"><label for="distance">Pickup – Drop Distance (km)</label><input type="number" id="distance" placeholder="Enter distance in km" min="1" step="any"></div>
+    <div class="form-group"><label for="pickupDateTime">Date / Time to Pickup</label><input type="datetime-local" id="pickupDateTime"></div>
+    <div class="form-group"><label for="helpers">Need How Many Helpers?</label><input type="number" id="helpers" value="0" min="0" step="1"><small style="color:#666;">RM<span id="helperRateDisplay"></span> per helper</small></div>
+    <div class="form-group"><div class="checkbox-group"><input type="checkbox" id="tailgate"><label for="tailgate">Need Tailgate? (+RM<span id="tailgateRateDisplay"></span>)</label></div></div>
+    <div class="form-group"><label for="dropPoints">How Many Drop Points?</label><input type="number" id="dropPoints" value="1" min="1" step="1"><small style="color:#666;">First drop included, extra drops RM<span id="extraDropRateDisplay"></span> each</small></div>
+
+    <button class="btn-calculate" onclick="calculateFare()">Calculate Total Price</button>
+    <div class="total-box" id="totalDisplay">RM 0.00</div>
+    <div class="waiting-warning">⚠️ A waiting fee will be charged for any delay exceeding 30 minutes.</div>
+    <button class="btn-download" id="downloadBtn" style="display: none;" onclick="downloadSummary()">📥 Download Quotation (PDF)</button>
+
+    <div id="adminPanel" class="admin-panel"><h3>Admin Rate Configuration</h3><div id="adminFields"></div><button class="admin-btn" id="saveRatesBtn">Save & Reload</button><button class="admin-btn" id="resetDefaultBtn">Reset to Defaults</button></div>
+
+    <script>
+        const CURRENT_RATES = ${ratesJson};
+        let currentRates = JSON.parse(localStorage.getItem('ss_transport_rates'));
+        if (!currentRates) currentRates = CURRENT_RATES;
+        function updateRateDisplays() {
+            document.getElementById('helperRateDisplay').innerText = currentRates.helperPrice;
+            document.getElementById('tailgateRateDisplay').innerText = currentRates.tailgatePrice;
+            document.getElementById('extraDropRateDisplay').innerText = currentRates.extraDropPrice;
+        }
+        function isRushHour(pickupDate) {
+            if (!pickupDate) return false;
+            const minutes = pickupDate.getHours()*60+pickupDate.getMinutes();
+            const ms = currentRates.rushMorningStart.hour*60+currentRates.rushMorningStart.minute;
+            const me = currentRates.rushMorningEnd.hour*60+currentRates.rushMorningEnd.minute;
+            const as = currentRates.rushAfternoonStart.hour*60+currentRates.rushAfternoonStart.minute;
+            const ae = currentRates.rushAfternoonEnd.hour*60+currentRates.rushAfternoonEnd.minute;
+            return (minutes>=ms && minutes<=me) || (minutes>=as && minutes<=ae);
+        }
+        function getRushHourSurcharge(vehicle, pickupDate) {
+            if (!isRushHour(pickupDate)) return 0;
+            return currentRates.rushHourSurcharges[vehicle]||0;
+        }
+        function isLateNight(pickupDate) {
+            if (!pickupDate) return false;
+            const h = pickupDate.getHours();
+            return h>=currentRates.lateNightStartHour || h<currentRates.lateNightEndHour;
+        }
+        function calculateDistanceFare(vehicle, dist) {
+            const cfg = currentRates.vehicleRates[vehicle];
+            if (!cfg) return 0;
+            if (dist<=cfg.baseKm) return cfg.basePrice;
+            const extra = dist-cfg.baseKm;
+            let rate=0;
+            for(const t of cfg.extraTiers) if(dist<=t.upTo) { rate=t.rate; break; }
+            return cfg.basePrice+extra*rate;
+        }
+        let lastCalc=null;
+        function calculateFare() {
+            const v=document.getElementById('vehicleType').value;
+            const d=parseFloat(document.getElementById('distance').value);
+            const ps=document.getElementById('pickupDateTime').value;
+            const h=parseInt(document.getElementById('helpers').value)||0;
+            const tg=document.getElementById('tailgate').checked;
+            const dp=parseInt(document.getElementById('dropPoints').value)||1;
+            if(isNaN(d)||d<=0) { alert('Enter valid distance'); return; }
+            let fare=calculateDistanceFare(v,d);
+            let ln=false, pd=null;
+            if(ps) { pd=new Date(ps); if(!isNaN(pd)) ln=isLateNight(pd); }
+            if(ln) fare*=currentRates.lateNightMultiplier;
+            let rush=0;
+            if(pd&&!ln) rush=getRushHourSurcharge(v,pd);
+            const total=fare+(h*currentRates.helperPrice)+(tg?currentRates.tailgatePrice:0)+(Math.max(0,dp-1)*currentRates.extraDropPrice)+rush;
+            document.getElementById('totalDisplay').innerHTML='RM '+total.toFixed(2);
+            lastCalc={vehicle:v, distance:d, pickupStr:ps, helpers:h, tailgate:tg, dropPoints:dp, total:total};
+            document.getElementById('downloadBtn').style.display='block';
+        }
+        function downloadSummary() {
+            if(!lastCalc) { alert('Calculate fare first'); return; }
+            const d=lastCalc;
+            const {jsPDF}=window.jspdf;
+            const doc=new jsPDF();
+            doc.setFillColor(0,123,255); doc.rect(0,0,210,25,'F');
+            doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255); doc.setFontSize(20);
+            doc.text('Lorry Fare Quotation',105,16,{align:'center'});
+            doc.setTextColor(0,0,0); doc.setFontSize(13); doc.setFont('helvetica','normal');
+            let y=40;
+            const add=(l,v)=>{ doc.setFont('helvetica','bold'); doc.text(l,25,y); doc.setFont('helvetica','normal'); doc.text(v,120,y); y+=11; };
+            add('Vehicle:', d.vehicle+' Lorry');
+            add('Distance:', d.distance+' km');
+            add('Pickup Date/Time:', d.pickupStr?new Date(d.pickupStr).toLocaleString():'Not specified');
+            add('Helpers:', d.helpers.toString());
+            add('Tailgate:', d.tailgate?'Yes':'No');
+            add('Drop Points:', d.dropPoints.toString());
+            y+=8;
+            doc.setFillColor(240,240,240); doc.rect(20,y-6,160,14,'F');
+            doc.setFont('helvetica','bold'); doc.setFontSize(15);
+            doc.text('TOTAL:',25,y);
+            doc.text('RM '+d.total.toFixed(2),120,y);
+            doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(100,100,100);
+            doc.text('Waiting fee charged for delays exceeding 30 minutes.',105,280,{align:'center'});
+            doc.save('quotation_summary.pdf');
+        }
+        // Admin panel (5 clicks)
+        let cc=0, ct=null;
+        document.getElementById('versionClick').addEventListener('click',()=>{ cc++; if(ct) clearTimeout(ct); ct=setTimeout(()=>{cc=0;},1000); if(cc>=5){ document.getElementById('adminPanel').style.display='block'; renderAdmin(); cc=0; } });
+        function renderAdmin() {
+            const c=document.getElementById('adminFields');
+            let html='<div class="admin-row"><strong>Vehicle Rates</strong></div>';
+            for(const [veh,data] of Object.entries(currentRates.vehicleRates)) {
+                html+='<div class="admin-row"><label>'+veh+' Base Km:</label><input type="number" id="baseKm_'+veh+'" value="'+data.baseKm+'" step="1"></div>';
+                html+='<div class="admin-row"><label>'+veh+' Base Price (RM):</label><input type="number" id="basePrice_'+veh+'" value="'+data.basePrice+'" step="1"></div>';
+                data.extraTiers.forEach((t,idx)=>{
+                    const upToVal=t.upTo===Infinity?'9999':t.upTo;
+                    html+='<div class="admin-row"><label>'+veh+' Tier '+(idx+1)+' (up to km):</label><input type="number" id="tierUpTo_'+veh+'_'+idx+'" value="'+upToVal+'" step="1"></div>';
+                    html+='<div class="admin-row"><label>'+veh+' Tier '+(idx+1)+' rate (RM/km):</label><input type="number" id="tierRate_'+veh+'_'+idx+'" value="'+t.rate+'" step="0.5"></div>';
+                });
+            }
+            html+='<div class="admin-row"><label>Helper Price (RM):</label><input type="number" id="helperPrice" value="'+currentRates.helperPrice+'" step="5"></div>';
+            html+='<div class="admin-row"><label>Tailgate Price (RM):</label><input type="number" id="tailgatePrice" value="'+currentRates.tailgatePrice+'" step="5"></div>';
+            html+='<div class="admin-row"><label>Extra Drop Price (RM):</label><input type="number" id="extraDropPrice" value="'+currentRates.extraDropPrice+'" step="5"></div>';
+            html+='<div class="admin-row"><label>Late Night Multiplier (x):</label><input type="number" id="lateNightMultiplier" value="'+currentRates.lateNightMultiplier+'" step="0.1"></div>';
+            html+='<div class="admin-row"><label>Late Night Start Hour:</label><input type="number" id="lateNightStartHour" value="'+currentRates.lateNightStartHour+'" step="1"></div>';
+            html+='<div class="admin-row"><label>Late Night End Hour:</label><input type="number" id="lateNightEndHour" value="'+currentRates.lateNightEndHour+'" step="1"></div>';
+            html+='<div class="admin-row"><label>Rush Hour 10ft (RM):</label><input type="number" id="rush10ft" value="'+currentRates.rushHourSurcharges['10ft']+'" step="5"></div>';
+            html+='<div class="admin-row"><label>Rush Hour 14ft (RM):</label><input type="number" id="rush14ft" value="'+currentRates.rushHourSurcharges['14ft']+'" step="5"></div>';
+            html+='<div class="admin-row"><label>Rush Hour 17ft (RM):</label><input type="number" id="rush17ft" value="'+currentRates.rushHourSurcharges['17ft']+'" step="5"></div>';
+            html+='<div class="admin-row"><label>Morning Rush Start (HH:MM):</label><input type="text" id="morningStart" value="'+String(currentRates.rushMorningStart.hour).padStart(2,'0')+':'+String(currentRates.rushMorningStart.minute).padStart(2,'0')+'"></div>';
+            html+='<div class="admin-row"><label>Morning Rush End (HH:MM):</label><input type="text" id="morningEnd" value="'+String(currentRates.rushMorningEnd.hour).padStart(2,'0')+':'+String(currentRates.rushMorningEnd.minute).padStart(2,'0')+'"></div>';
+            html+='<div class="admin-row"><label>Afternoon Rush Start (HH:MM):</label><input type="text" id="afternoonStart" value="'+String(currentRates.rushAfternoonStart.hour).padStart(2,'0')+':'+String(currentRates.rushAfternoonStart.minute).padStart(2,'0')+'"></div>';
+            html+='<div class="admin-row"><label>Afternoon Rush End (HH:MM):</label><input type="text" id="afternoonEnd" value="'+String(currentRates.rushAfternoonEnd.hour).padStart(2,'0')+':'+String(currentRates.rushAfternoonEnd.minute).padStart(2,'0')+'"></div>';
+            c.innerHTML=html;
+        }
+        document.getElementById('saveRatesBtn').addEventListener('click',()=>{
+            function get(id){ return document.getElementById(id).value; }
+            const nr=JSON.parse(JSON.stringify(currentRates));
+            for(const v of ['10ft','14ft','17ft']){
+                nr.vehicleRates[v].baseKm=parseFloat(get('baseKm_'+v));
+                nr.vehicleRates[v].basePrice=parseFloat(get('basePrice_'+v));
+                const tiers=[];
+                let i=0;
+                while(true){
+                    const up=document.getElementById('tierUpTo_'+v+'_'+i);
+                    const rt=document.getElementById('tierRate_'+v+'_'+i);
+                    if(!up||!rt) break;
+                    let u=parseFloat(up.value);
+                    const r=parseFloat(rt.value);
+                    if(isNaN(r)) break;
+                    if(isNaN(u)) u=Infinity;
+                    tiers.push({upTo:u===9999?Infinity:u, rate:r});
+                    i++;
+                }
+                if(tiers.length) nr.vehicleRates[v].extraTiers=tiers;
+            }
+            nr.helperPrice=parseFloat(get('helperPrice'));
+            nr.tailgatePrice=parseFloat(get('tailgatePrice'));
+            nr.extraDropPrice=parseFloat(get('extraDropPrice'));
+            nr.lateNightMultiplier=parseFloat(get('lateNightMultiplier'));
+            nr.lateNightStartHour=parseInt(get('lateNightStartHour'));
+            nr.lateNightEndHour=parseInt(get('lateNightEndHour'));
+            nr.rushHourSurcharges['10ft']=parseFloat(get('rush10ft'));
+            nr.rushHourSurcharges['14ft']=parseFloat(get('rush14ft'));
+            nr.rushHourSurcharges['17ft']=parseFloat(get('rush17ft'));
+            function pt(s){ const p=s.split(':'); if(p.length!==2) return null; return {hour:parseInt(p[0]), minute:parseInt(p[1])}; }
+            const ms=pt(get('morningStart')); if(ms) nr.rushMorningStart=ms;
+            const me=pt(get('morningEnd')); if(me) nr.rushMorningEnd=me;
+            const as=pt(get('afternoonStart')); if(as) nr.rushAfternoonStart=as;
+            const ae=pt(get('afternoonEnd')); if(ae) nr.rushAfternoonEnd=ae;
+            localStorage.setItem('ss_transport_rates',JSON.stringify(nr));
+            alert('Rates saved. Reloading...');
+            location.reload();
+        });
+        document.getElementById('resetDefaultBtn').addEventListener('click',()=>{ if(confirm('Reset to defaults?')){ localStorage.removeItem('ss_transport_rates'); location.reload(); } });
+        updateRateDisplays();
+    <\/script>
+</body>
+</html>`;
+        }
+    </script>
+</body>
+</html>
