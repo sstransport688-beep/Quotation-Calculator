@@ -101,7 +101,7 @@
 
     <script>
         // ==================== SINGLE API URL ====================
-        const API_URL = "https://script.google.com/macros/s/AKfycbzx0nQ1JDvBg_WMEonQBL7ZCmWDuAFV5ycpABOeQTwDHMbHaBjlutJcZWLr_rbUmvPi/exec";  // <-- REPLACE WITH YOUR DEPLOYED WEB APP URL
+        const API_URL = "https://script.google.com/macros/s/AKfycbzx0nQ1JDvBg_WMEonQBL7ZCmWDuAFV5ycpABOeQTwDHMbHaBjlutJcZWLr_rbUmvPi/exec";  // <-- REPLACE WITH YOUR ACTUAL DEPLOYED WEB APP URL
 
         let currentRates = null;
 
@@ -127,39 +127,37 @@
             };
         }
 
-async function loadRates() {
-    const loadingDiv = document.getElementById('loadingMsg');
-    const errorDiv = document.getElementById('errorMsg');
-    try {
-        console.log("Fetching from API:", API_URL);
-        const response = await fetch(API_URL);
-        console.log("Response status:", response.status);
-        const text = await response.text();
-        console.log("Raw response:", text.substring(0, 200));
-        const data = JSON.parse(text);
-        console.log("Parsed data:", data);
-        if (!data || !data.vehicleRates) throw new Error('Invalid structure');
-        currentRates = data;
-        // Convert large numbers (999999) to Infinity
-        for (const veh in currentRates.vehicleRates) {
-            const tiers = currentRates.vehicleRates[veh].extraTiers;
-            if (tiers) {
-                for (let i = 0; i < tiers.length; i++) {
-                    if (tiers[i].upTo >= 999999) tiers[i].upTo = Infinity;
+        async function loadRates() {
+            const loadingDiv = document.getElementById('loadingMsg');
+            const errorDiv = document.getElementById('errorMsg');
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                currentRates = await response.json();
+                // Validate structure
+                if (!currentRates || typeof currentRates !== 'object' || !currentRates.vehicleRates) {
+                    throw new Error('Invalid rates structure');
                 }
+                // Convert large number (100000) to Infinity for distance comparisons
+                for (const veh in currentRates.vehicleRates) {
+                    const tiers = currentRates.vehicleRates[veh].extraTiers;
+                    if (tiers && Array.isArray(tiers)) {
+                        for (let i = 0; i < tiers.length; i++) {
+                            if (tiers[i].upTo === 100000) tiers[i].upTo = Infinity;
+                        }
+                    }
+                }
+                loadingDiv.style.display = 'none';
+                updateRateDisplays();
+            } catch (err) {
+                console.error("Load error:", err);
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.innerText = `⚠️ Failed to load rates: ${err.message}. Using fallback.`;
+                currentRates = getFallbackRates();
+                updateRateDisplays();
             }
         }
-        loadingDiv.style.display = 'none';
-        updateRateDisplays();
-    } catch (err) {
-        console.error("Load error:", err);
-        loadingDiv.style.display = 'none';
-        errorDiv.style.display = 'block';
-        errorDiv.innerText = `⚠️ Failed to load rates: ${err.message}. Using fallback.`;
-        currentRates = getFallbackRates();
-        updateRateDisplays();
-    }
-}
 
         function updateRateDisplays() {
             if (!currentRates) return;
@@ -168,14 +166,211 @@ async function loadRates() {
             document.getElementById('extraDropRateDisplay').innerText = currentRates.extraDropPrice;
         }
 
-        // Rush hour, late night, distance fare, calculateFare, downloadSummary functions remain the same as before.
-        // To save space, I'm not repeating all of them here – you can copy them from a previous working version.
-        // But for completeness, I'll include the essential ones. However, the key is that the API URL is now used for both read and write.
+        function isRushHour(pickupDate) {
+            if (!pickupDate || !currentRates) return false;
+            const minutes = pickupDate.getHours() * 60 + pickupDate.getMinutes();
+            const ms = currentRates.rushMorningStart.hour * 60 + currentRates.rushMorningStart.minute;
+            const me = currentRates.rushMorningEnd.hour * 60 + currentRates.rushMorningEnd.minute;
+            const as = currentRates.rushAfternoonStart.hour * 60 + currentRates.rushAfternoonStart.minute;
+            const ae = currentRates.rushAfternoonEnd.hour * 60 + currentRates.rushAfternoonEnd.minute;
+            return (minutes >= ms && minutes <= me) || (minutes >= as && minutes <= ae);
+        }
 
-        // Simplified version of collectRatesFromForm, renderAdminFields, etc. – you already have them.
-        // I assume you have the full code from earlier messages. If you need the complete HTML again, let me know.
+        function getRushHourSurcharge(vehicle, pickupDate) {
+            if (!isRushHour(pickupDate)) return 0;
+            return currentRates.rushHourSurcharges[vehicle] || 0;
+        }
 
-        // ========== PUSH TO CLOUD ==========
+        function isLateNight(pickupDate) {
+            if (!pickupDate || !currentRates) return false;
+            const hour = pickupDate.getHours();
+            return hour >= currentRates.lateNightStartHour || hour < currentRates.lateNightEndHour;
+        }
+
+        function calculateDistanceFare(vehicle, distance) {
+            const config = currentRates.vehicleRates[vehicle];
+            if (!config) return 0;
+            if (distance <= config.baseKm) return config.basePrice;
+            const extra = distance - config.baseKm;
+            let rate = 0;
+            for (const tier of config.extraTiers) {
+                if (distance <= tier.upTo) { rate = tier.rate; break; }
+            }
+            return config.basePrice + extra * rate;
+        }
+
+        let lastCalc = null;
+
+        function calculateFare() {
+            if (!currentRates) { alert('Rates still loading. Please wait.'); return; }
+            const vehicle = document.getElementById('vehicleType').value;
+            const distance = parseFloat(document.getElementById('distance').value);
+            const pickupStr = document.getElementById('pickupDateTime').value;
+            const helpers = parseInt(document.getElementById('helpers').value) || 0;
+            const tailgate = document.getElementById('tailgate').checked;
+            const dropPoints = parseInt(document.getElementById('dropPoints').value) || 1;
+
+            if (isNaN(distance) || distance <= 0) {
+                alert('Please enter a valid distance.');
+                lastCalc = null;
+                document.getElementById('downloadBtn').style.display = 'none';
+                return;
+            }
+
+            let fare = calculateDistanceFare(vehicle, distance);
+            let lateNight = false, pickupDate = null;
+            if (pickupStr) {
+                pickupDate = new Date(pickupStr);
+                if (!isNaN(pickupDate)) lateNight = isLateNight(pickupDate);
+            }
+            if (lateNight) fare *= currentRates.lateNightMultiplier;
+            let rush = 0;
+            if (pickupDate && !lateNight) rush = getRushHourSurcharge(vehicle, pickupDate);
+
+            const helperCost = helpers * currentRates.helperPrice;
+            const tailgateCost = tailgate ? currentRates.tailgatePrice : 0;
+            const extraDropCost = Math.max(0, dropPoints - 1) * currentRates.extraDropPrice;
+            const total = fare + helperCost + tailgateCost + extraDropCost + rush;
+            document.getElementById('totalDisplay').innerHTML = `RM ${total.toFixed(2)}`;
+            lastCalc = { vehicle, distance, pickupStr, helpers, tailgate, dropPoints, total };
+            document.getElementById('downloadBtn').style.display = 'block';
+        }
+
+        function downloadSummary() {
+            if (!lastCalc) { alert('Calculate fare first.'); return; }
+            const d = lastCalc;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFillColor(0, 123, 255);
+            doc.rect(0, 0, 210, 25, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(20);
+            doc.text('Lorry Fare Quotation', 105, 16, { align: 'center' });
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(13);
+            doc.setFont('helvetica', 'normal');
+            let y = 40;
+            const addRow = (label, val) => {
+                doc.setFont('helvetica', 'bold');
+                doc.text(label, 25, y);
+                doc.setFont('helvetica', 'normal');
+                doc.text(val, 120, y);
+                y += 11;
+            };
+            addRow('Vehicle:', d.vehicle + ' Lorry');
+            addRow('Distance:', d.distance + ' km');
+            addRow('Pickup Date/Time:', d.pickupStr ? new Date(d.pickupStr).toLocaleString() : 'Not specified');
+            addRow('Helpers:', d.helpers.toString());
+            addRow('Tailgate:', d.tailgate ? 'Yes' : 'No');
+            addRow('Drop Points:', d.dropPoints.toString());
+            y += 8;
+            doc.setFillColor(240, 240, 240);
+            doc.rect(20, y - 6, 160, 14, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(15);
+            doc.text('TOTAL:', 25, y);
+            doc.text(`RM ${d.total.toFixed(2)}`, 120, y);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(100, 100, 100);
+            doc.text('Waiting fee charged for delays exceeding 30 minutes.', 105, 280, { align: 'center' });
+            doc.save('quotation_summary.pdf');
+        }
+
+        // Admin panel (5 clicks)
+        let clickCount = 0, clickTimer = null;
+        const versionDiv = document.getElementById('versionClick');
+        const adminPanelDiv = document.getElementById('adminPanel');
+        versionDiv.addEventListener('click', () => {
+            clickCount++;
+            if (clickTimer) clearTimeout(clickTimer);
+            clickTimer = setTimeout(() => { clickCount = 0; }, 1000);
+            if (clickCount >= 5) {
+                if (!currentRates || !currentRates.vehicleRates) {
+                    alert('Rates not loaded yet. Please wait or refresh.');
+                    clickCount = 0;
+                    return;
+                }
+                adminPanelDiv.style.display = 'block';
+                renderAdminFields();
+                clickCount = 0;
+            }
+        });
+
+        function renderAdminFields() {
+            if (!currentRates || !currentRates.vehicleRates) return;
+            const container = document.getElementById('adminFields');
+            let html = `<div class="admin-row"><strong>Current Rates (editable)</strong></div>`;
+            for (const [veh, data] of Object.entries(currentRates.vehicleRates)) {
+                html += `<div class="admin-row"><label>${veh} Base Km:</label><input type="number" id="baseKm_${veh}" value="${data.baseKm}" step="1"></div>`;
+                html += `<div class="admin-row"><label>${veh} Base Price:</label><input type="number" id="basePrice_${veh}" value="${data.basePrice}" step="5"></div>`;
+                if (data.extraTiers && Array.isArray(data.extraTiers)) {
+                    data.extraTiers.forEach((tier, idx) => {
+                        const upToVal = (tier.upTo === Infinity || tier.upTo > 99999) ? '100000' : tier.upTo;
+                        html += `<div class="admin-row"><label>${veh} Tier${idx+1} upTo (km):</label><input type="number" id="tierUpTo_${veh}_${idx}" value="${upToVal}" step="10"></div>`;
+                        html += `<div class="admin-row"><label>${veh} Tier${idx+1} rate (RM):</label><input type="number" id="tierRate_${veh}_${idx}" value="${tier.rate}" step="0.5"></div>`;
+                    });
+                }
+            }
+            html += `<div class="admin-row"><label>Helper Price:</label><input type="number" id="helperPrice" value="${currentRates.helperPrice}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Tailgate Price:</label><input type="number" id="tailgatePrice" value="${currentRates.tailgatePrice}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Extra Drop Price:</label><input type="number" id="extraDropPrice" value="${currentRates.extraDropPrice}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Late Night Multiplier:</label><input type="number" id="lateNightMultiplier" value="${currentRates.lateNightMultiplier}" step="0.1"></div>`;
+            html += `<div class="admin-row"><label>Late Night Start Hour:</label><input type="number" id="lateNightStartHour" value="${currentRates.lateNightStartHour}" step="1"></div>`;
+            html += `<div class="admin-row"><label>Late Night End Hour:</label><input type="number" id="lateNightEndHour" value="${currentRates.lateNightEndHour}" step="1"></div>`;
+            html += `<div class="admin-row"><label>Rush 10ft (RM):</label><input type="number" id="rush10ft" value="${currentRates.rushHourSurcharges['10ft']}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Rush 14ft (RM):</label><input type="number" id="rush14ft" value="${currentRates.rushHourSurcharges['14ft']}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Rush 17ft (RM):</label><input type="number" id="rush17ft" value="${currentRates.rushHourSurcharges['17ft']}" step="5"></div>`;
+            html += `<div class="admin-row"><label>Morning Start (HH:MM):</label><input type="text" id="morningStart" value="${String(currentRates.rushMorningStart.hour).padStart(2,'0')}:${String(currentRates.rushMorningStart.minute).padStart(2,'0')}"></div>`;
+            html += `<div class="admin-row"><label>Morning End:</label><input type="text" id="morningEnd" value="${String(currentRates.rushMorningEnd.hour).padStart(2,'0')}:${String(currentRates.rushMorningEnd.minute).padStart(2,'0')}"></div>`;
+            html += `<div class="admin-row"><label>Afternoon Start:</label><input type="text" id="afternoonStart" value="${String(currentRates.rushAfternoonStart.hour).padStart(2,'0')}:${String(currentRates.rushAfternoonStart.minute).padStart(2,'0')}"></div>`;
+            html += `<div class="admin-row"><label>Afternoon End:</label><input type="text" id="afternoonEnd" value="${String(currentRates.rushAfternoonEnd.hour).padStart(2,'0')}:${String(currentRates.rushAfternoonEnd.minute).padStart(2,'0')}"></div>`;
+            container.innerHTML = html;
+        }
+
+        function collectRatesFromForm() {
+            const newRates = JSON.parse(JSON.stringify(currentRates));
+            for (const veh of ['10ft','14ft','17ft']) {
+                newRates.vehicleRates[veh].baseKm = parseFloat(document.getElementById(`baseKm_${veh}`).value);
+                newRates.vehicleRates[veh].basePrice = parseFloat(document.getElementById(`basePrice_${veh}`).value);
+                const tiers = [];
+                let idx = 0;
+                while (true) {
+                    const upToInput = document.getElementById(`tierUpTo_${veh}_${idx}`);
+                    const rateInput = document.getElementById(`tierRate_${veh}_${idx}`);
+                    if (!upToInput || !rateInput) break;
+                    let upTo = parseFloat(upToInput.value);
+                    const rate = parseFloat(rateInput.value);
+                    if (isNaN(rate)) break;
+                    if (isNaN(upTo)) upTo = Infinity;
+                    tiers.push({ upTo, rate });
+                    idx++;
+                }
+                if (tiers.length) newRates.vehicleRates[veh].extraTiers = tiers;
+            }
+            newRates.helperPrice = parseFloat(document.getElementById('helperPrice').value);
+            newRates.tailgatePrice = parseFloat(document.getElementById('tailgatePrice').value);
+            newRates.extraDropPrice = parseFloat(document.getElementById('extraDropPrice').value);
+            newRates.lateNightMultiplier = parseFloat(document.getElementById('lateNightMultiplier').value);
+            newRates.lateNightStartHour = parseInt(document.getElementById('lateNightStartHour').value);
+            newRates.lateNightEndHour = parseInt(document.getElementById('lateNightEndHour').value);
+            newRates.rushHourSurcharges['10ft'] = parseFloat(document.getElementById('rush10ft').value);
+            newRates.rushHourSurcharges['14ft'] = parseFloat(document.getElementById('rush14ft').value);
+            newRates.rushHourSurcharges['17ft'] = parseFloat(document.getElementById('rush17ft').value);
+            const parseTime = (s) => { let p = s.split(':'); if(p.length!==2) return null; return { hour: parseInt(p[0]), minute: parseInt(p[1]) }; };
+            const ms = parseTime(document.getElementById('morningStart').value);
+            if (ms) newRates.rushMorningStart = ms;
+            const me = parseTime(document.getElementById('morningEnd').value);
+            if (me) newRates.rushMorningEnd = me;
+            const as = parseTime(document.getElementById('afternoonStart').value);
+            if (as) newRates.rushAfternoonStart = as;
+            const ae = parseTime(document.getElementById('afternoonEnd').value);
+            if (ae) newRates.rushAfternoonEnd = ae;
+            return newRates;
+        }
+
+        // Push to cloud (uses ?data= parameter)
         document.getElementById('pushToCloudBtn').addEventListener('click', async () => {
             const newRates = collectRatesFromForm();
             const ratesForStorage = JSON.parse(JSON.stringify(newRates));
@@ -183,7 +378,7 @@ async function loadRates() {
                 const tiers = ratesForStorage.vehicleRates[veh].extraTiers;
                 if (tiers) {
                     for (let i = 0; i < tiers.length; i++) {
-                        if (tiers[i].upTo === Infinity) tiers[i].upTo = 999999;
+                        if (tiers[i].upTo === Infinity) tiers[i].upTo = 100000;
                     }
                 }
             }
@@ -228,13 +423,144 @@ async function loadRates() {
         });
 
         function generateClientHtml(rates, logoSrc, readUrl) {
-            // Similar to before, but using the same readUrl
-            // (Omitted for brevity – same as earlier)
+            const ratesCopy = JSON.parse(JSON.stringify(rates));
+            for (const veh in ratesCopy.vehicleRates) {
+                const tiers = ratesCopy.vehicleRates[veh].extraTiers;
+                if (tiers) {
+                    for (let i = 0; i < tiers.length; i++) {
+                        if (tiers[i].upTo === Infinity) tiers[i].upTo = 100000;
+                    }
+                }
+            }
+            const ratesJson = JSON.stringify(ratesCopy);
+            // Client HTML (no admin panel) – abbreviated for length; you can use the same template as before.
+            return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>SS Transport Quotation</title><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial;max-width:550px;margin:20px auto;padding:20px;border:1px solid #ccc;border-radius:12px;background:#fff;line-height:1.4}h1{text-align:center;margin-bottom:8px;font-size:1.6rem;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}h1 img{height:36px;width:auto;max-width:120px}.version{text-align:center;font-size:.7rem;color:#666;margin-bottom:20px}.form-group{margin-bottom:18px}label{display:block;font-weight:600;margin-bottom:6px;font-size:.9rem}input,select{width:100%;padding:12px;font-size:1rem;border:1px solid #bbb;border-radius:10px}.checkbox-group{display:flex;align-items:center;gap:12px;margin-top:5px}.checkbox-group input{width:22px;height:22px}.checkbox-group label{font-weight:normal;margin:0;font-size:.95rem}small{display:block;margin-top:5px;font-size:.7rem;color:#555}.btn-calculate{background:#007bff;color:white;border:none;padding:14px;font-size:1.1rem;font-weight:bold;cursor:pointer;border-radius:40px;width:100%;margin:15px 0 10px}.btn-download{background:#28a745;color:white;border:none;padding:14px;font-size:1rem;cursor:pointer;border-radius:40px;width:100%;margin-top:12px}.total-box{background:#f0f7ff;padding:18px;border-radius:20px;font-size:1.8rem;text-align:center;margin:20px 0 12px;font-weight:bold;border:1px solid #cce5ff;color:#004080}.waiting-warning{background:#fff3cd;border-left:5px solid #ffc107;border-radius:10px;padding:12px;margin:15px 0;text-align:center;color:#856404;font-size:.8rem}.loading,.error{text-align:center;margin:10px 0;font-size:.9rem}.loading{color:#007bff}.error{color:#dc3545}@media(max-width:480px){body{padding:15px;margin:10px}h1{font-size:1.3rem}h1 img{height:28px}.total-box{font-size:1.5rem;padding:14px}}<\/style>
+</head>
+<body>
+<h1><img src="${logoSrc}" alt="Logo" style="height:36px;width:auto;max-width:120px;"><span>SS Transport Quotation</span></h1>
+<div class="version">V2R05</div>
+<div id="loadingMsg" class="loading">📡 Loading latest rates...</div>
+<div id="errorMsg" class="error" style="display:none;"></div>
+<div class="form-group"><label>🚛 Select Your Vehicle</label><select id="vehicleType"><option value="10ft">10ft Lorry</option><option value="14ft">14ft Lorry</option><option value="17ft">17ft Lorry</option></select></div>
+<div class="form-group"><label>📍 Pickup – Drop Distance (km)</label><input type="number" id="distance" placeholder="Enter distance in km" min="1" step="any"></div>
+<div class="form-group"><label>📅 Date / Time to Pickup</label><input type="datetime-local" id="pickupDateTime"></div>
+<div class="form-group"><label>👷 Need How Many Helpers?</label><input type="number" id="helpers" value="0" min="0" step="1"><small>RM<span id="helperRateDisplay"></span> per helper</small></div>
+<div class="form-group"><div class="checkbox-group"><input type="checkbox" id="tailgate"><label>🔧 Need Tailgate? (+RM<span id="tailgateRateDisplay"></span>)</label></div></div>
+<div class="form-group"><label>📍 How Many Drop Points?</label><input type="number" id="dropPoints" value="1" min="1" step="1"><small>First drop included, extra drops RM<span id="extraDropRateDisplay"></span> each</small></div>
+<button class="btn-calculate" onclick="calculateFare()">💰 Calculate Total Price</button>
+<div class="total-box" id="totalDisplay">RM 0.00</div>
+<div class="waiting-warning">⚠️ A waiting fee will be charged for any delay exceeding 30 minutes.</div>
+<button class="btn-download" id="downloadBtn" style="display:none" onclick="downloadSummary()">📥 Download Quotation (PDF)</button>
+<script>
+const DEFAULT_RATES = ${ratesJson};
+let currentRates = null;
+async function loadRates() {
+    const loading = document.getElementById('loadingMsg');
+    const error = document.getElementById('errorMsg');
+    try {
+        const res = await fetch("${readUrl}");
+        if (!res.ok) throw new Error(\`HTTP \${res.status}\`);
+        currentRates = await res.json();
+        if (!currentRates || !currentRates.vehicleRates) throw new Error('Invalid structure');
+        for (const veh in currentRates.vehicleRates) {
+            const tiers = currentRates.vehicleRates[veh].extraTiers;
+            if (tiers) {
+                for (let i=0; i<tiers.length; i++) if (tiers[i].upTo === 100000) tiers[i].upTo = Infinity;
+            }
+        }
+        loading.style.display = 'none';
+        updateDisplays();
+    } catch(e) {
+        loading.style.display = 'none';
+        error.style.display = 'block';
+        error.innerText = '⚠️ Failed to load rates. Using default.';
+        currentRates = DEFAULT_RATES;
+        updateDisplays();
+    }
+}
+function updateDisplays() {
+    if(!currentRates) return;
+    document.getElementById('helperRateDisplay').innerText = currentRates.helperPrice;
+    document.getElementById('tailgateRateDisplay').innerText = currentRates.tailgatePrice;
+    document.getElementById('extraDropRateDisplay').innerText = currentRates.extraDropPrice;
+}
+function isRushHour(pd) {
+    if(!pd||!currentRates) return false;
+    let m=pd.getHours()*60+pd.getMinutes();
+    let ms=currentRates.rushMorningStart.hour*60+currentRates.rushMorningStart.minute;
+    let me=currentRates.rushMorningEnd.hour*60+currentRates.rushMorningEnd.minute;
+    let as=currentRates.rushAfternoonStart.hour*60+currentRates.rushAfternoonStart.minute;
+    let ae=currentRates.rushAfternoonEnd.hour*60+currentRates.rushAfternoonEnd.minute;
+    return (m>=ms&&m<=me)||(m>=as&&m<=ae);
+}
+function getRush(v,pd){ return isRushHour(pd)?currentRates.rushHourSurcharges[v]||0:0; }
+function isLateNight(pd){ if(!pd) return false; let h=pd.getHours(); return h>=currentRates.lateNightStartHour||h<currentRates.lateNightEndHour; }
+function calcDistFare(v,d){
+    let cfg=currentRates.vehicleRates[v];
+    if(!cfg) return 0;
+    if(d<=cfg.baseKm) return cfg.basePrice;
+    let extra=d-cfg.baseKm, rate=0;
+    for(let t of cfg.extraTiers) if(d<=t.upTo) { rate=t.rate; break; }
+    return cfg.basePrice+extra*rate;
+}
+let lastCalc=null;
+function calculateFare(){
+    if(!currentRates){ alert('Rates loading. Wait.'); return; }
+    let v=document.getElementById('vehicleType').value;
+    let d=parseFloat(document.getElementById('distance').value);
+    let ps=document.getElementById('pickupDateTime').value;
+    let h=parseInt(document.getElementById('helpers').value)||0;
+    let tg=document.getElementById('tailgate').checked;
+    let dp=parseInt(document.getElementById('dropPoints').value)||1;
+    if(isNaN(d)||d<=0){ alert('Enter valid distance'); return; }
+    let fare=calcDistFare(v,d);
+    let ln=false, pd=null;
+    if(ps){ pd=new Date(ps); if(!isNaN(pd)) ln=isLateNight(pd); }
+    if(ln) fare*=currentRates.lateNightMultiplier;
+    let rush=0;
+    if(pd&&!ln) rush=getRush(v,pd);
+    let total=fare+(h*currentRates.helperPrice)+(tg?currentRates.tailgatePrice:0)+(Math.max(0,dp-1)*currentRates.extraDropPrice)+rush;
+    document.getElementById('totalDisplay').innerHTML='RM '+total.toFixed(2);
+    lastCalc={vehicle:v, distance:d, pickupStr:ps, helpers:h, tailgate:tg, dropPoints:dp, total:total};
+    document.getElementById('downloadBtn').style.display='block';
+}
+function downloadSummary(){
+    if(!lastCalc){ alert('Calculate first'); return; }
+    let d=lastCalc;
+    let {jsPDF}=window.jspdf;
+    let doc=new jsPDF();
+    doc.setFillColor(0,123,255); doc.rect(0,0,210,25,'F');
+    doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255); doc.setFontSize(20);
+    doc.text('Lorry Fare Quotation',105,16,{align:'center'});
+    doc.setTextColor(0,0,0); doc.setFontSize(13); doc.setFont('helvetica','normal');
+    let y=40;
+    let add=(l,v)=>{ doc.setFont('helvetica','bold'); doc.text(l,25,y); doc.setFont('helvetica','normal'); doc.text(v,120,y); y+=11; };
+    add('Vehicle:', d.vehicle+' Lorry');
+    add('Distance:', d.distance+' km');
+    add('Pickup:', d.pickupStr?new Date(d.pickupStr).toLocaleString():'Not specified');
+    add('Helpers:', d.helpers.toString());
+    add('Tailgate:', d.tailgate?'Yes':'No');
+    add('Drop Points:', d.dropPoints.toString());
+    y+=8;
+    doc.setFillColor(240,240,240); doc.rect(20,y-6,160,14,'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(15);
+    doc.text('TOTAL:',25,y);
+    doc.text('RM '+d.total.toFixed(2),120,y);
+    doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(100,100,100);
+    doc.text('Waiting fee charged for delays exceeding 30 minutes.',105,280,{align:'center'});
+    doc.save('quotation_summary.pdf');
+}
+loadRates();
+<\/script>
+</body>
+</html>`;
         }
 
-        // You need to also define collectRatesFromForm, renderAdminFields, calculateFare, downloadSummary, etc.
-        // Since I cannot send a 500-line message, I'll assume you have those from previous working HTML.
-        // If not, please ask and I will provide the complete file.
+        // Start loading
+        loadRates();
     </script>
 </body>
 </html>
