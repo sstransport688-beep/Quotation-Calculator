@@ -127,33 +127,39 @@
             };
         }
 
-        async function loadRates() {
-            const loadingDiv = document.getElementById('loadingMsg');
-            const errorDiv = document.getElementById('errorMsg');
-            try {
-                const response = await fetch(API_URL);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                currentRates = await response.json();
-                if (!currentRates || !currentRates.vehicleRates) throw new Error('Invalid structure');
-                // Convert 999999 (or large number) to Infinity
-                for (const veh in currentRates.vehicleRates) {
-                    const tiers = currentRates.vehicleRates[veh].extraTiers;
-                    if (tiers) {
-                        for (let i = 0; i < tiers.length; i++) {
-                            if (tiers[i].upTo >= 999999) tiers[i].upTo = Infinity;
-                        }
-                    }
+async function loadRates() {
+    const loadingDiv = document.getElementById('loadingMsg');
+    const errorDiv = document.getElementById('errorMsg');
+    try {
+        console.log("Fetching from API:", API_URL);
+        const response = await fetch(API_URL);
+        console.log("Response status:", response.status);
+        const text = await response.text();
+        console.log("Raw response:", text.substring(0, 200));
+        const data = JSON.parse(text);
+        console.log("Parsed data:", data);
+        if (!data || !data.vehicleRates) throw new Error('Invalid structure');
+        currentRates = data;
+        // Convert large numbers (999999) to Infinity
+        for (const veh in currentRates.vehicleRates) {
+            const tiers = currentRates.vehicleRates[veh].extraTiers;
+            if (tiers) {
+                for (let i = 0; i < tiers.length; i++) {
+                    if (tiers[i].upTo >= 999999) tiers[i].upTo = Infinity;
                 }
-                loadingDiv.style.display = 'none';
-                updateRateDisplays();
-            } catch (err) {
-                loadingDiv.style.display = 'none';
-                errorDiv.style.display = 'block';
-                errorDiv.innerText = `⚠️ Failed to load rates: ${err.message}. Using fallback.`;
-                currentRates = getFallbackRates();
-                updateRateDisplays();
             }
         }
+        loadingDiv.style.display = 'none';
+        updateRateDisplays();
+    } catch (err) {
+        console.error("Load error:", err);
+        loadingDiv.style.display = 'none';
+        errorDiv.style.display = 'block';
+        errorDiv.innerText = `⚠️ Failed to load rates: ${err.message}. Using fallback.`;
+        currentRates = getFallbackRates();
+        updateRateDisplays();
+    }
+}
 
         function updateRateDisplays() {
             if (!currentRates) return;
