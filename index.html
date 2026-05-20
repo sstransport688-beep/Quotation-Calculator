@@ -27,11 +27,7 @@
             gap: 8px;
             flex-wrap: wrap;
         }
-        h1 img {
-            height: 36px;
-            width: auto;
-            max-width: 120px;
-        }
+        h1 img { height: 36px; width: auto; max-width: 120px; }
         .version {
             text-align: center;
             font-size: 0.7rem;
@@ -107,8 +103,8 @@
     <script>
         // ==================== CLOUD URLs ====================
         // ⬇️ REPLACE WITH YOUR ACTUAL DEPLOYED WEB APP URLs ⬇️
-        const READ_API_URL = "https://script.google.com/macros/s/AKfycbyy9FgRijXtoBb5Mk3Xq_rYCZYnbfZNipjgxaFmgD4V2ytxA5GAJBiIUHsGqTqQ4iP3/exec";   // doGet from code.gs
-        const WRITE_API_URL = "https://script.google.com/macros/s/AKfycbx4MeHE0GPlQOu8pSIbDzdpZty9k6lvqq5-5ShGOFr7lALlf4vdcqTnKhW_HYLzvZiR/exec";      // GET-based writer from saveRates.gs
+        const READ_API_URL = "https://script.google.com/macros/s/AKfycbwS0rXWn3veIpZFjTSu_vfumwhmJ0YAlZJ65qxoNpDw7HGIDA1xpyxqQihxDLClFAt6/exec";   // doGet from code.gs
+        const WRITE_API_URL = "https://script.google.com/macros/s/AKfycbyVE4_RldW3n0CBuAzoSu3Nn8-UHbW6JbBK48TcULcor36jQ6GdbuCDDEjQIaT3z0M-/exec";      // GET-based writer from saveRates.gs
 
         let currentRates = null;
 
@@ -119,14 +115,13 @@
                 const response = await fetch(READ_API_URL);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 currentRates = await response.json();
-                // Validate that the loaded object has the required structure
-                if (!currentRates || typeof currentRates !== 'object' || !currentRates.vehicleRates) {
-                    throw new Error('Invalid rates structure received from cloud');
+                if (!currentRates || !currentRates.vehicleRates) {
+                    throw new Error('Invalid rates structure');
                 }
-                // Convert 100000 back to Infinity for extraTiers
+                // Convert 100000 back to Infinity
                 for (const veh in currentRates.vehicleRates) {
                     const tiers = currentRates.vehicleRates[veh].extraTiers;
-                    if (tiers && Array.isArray(tiers)) {
+                    if (tiers) {
                         for (let i = 0; i < tiers.length; i++) {
                             if (tiers[i].upTo === 100000) tiers[i].upTo = Infinity;
                         }
@@ -214,14 +209,12 @@
             const helpers = parseInt(document.getElementById('helpers').value) || 0;
             const tailgate = document.getElementById('tailgate').checked;
             const dropPoints = parseInt(document.getElementById('dropPoints').value) || 1;
-
             if (isNaN(distance) || distance <= 0) {
                 alert('Please enter a valid distance.');
                 lastCalc = null;
                 document.getElementById('downloadBtn').style.display = 'none';
                 return;
             }
-
             let fare = calculateDistanceFare(vehicle, distance);
             let lateNight = false, pickupDate = null;
             if (pickupStr) {
@@ -231,11 +224,7 @@
             if (lateNight) fare *= currentRates.lateNightMultiplier;
             let rush = 0;
             if (pickupDate && !lateNight) rush = getRushHourSurcharge(vehicle, pickupDate);
-
-            const helperCost = helpers * currentRates.helperPrice;
-            const tailgateCost = tailgate ? currentRates.tailgatePrice : 0;
-            const extraDropCost = Math.max(0, dropPoints - 1) * currentRates.extraDropPrice;
-            const total = fare + helperCost + tailgateCost + extraDropCost + rush;
+            const total = fare + (helpers * currentRates.helperPrice) + (tailgate ? currentRates.tailgatePrice : 0) + (Math.max(0, dropPoints - 1) * currentRates.extraDropPrice) + rush;
             document.getElementById('totalDisplay').innerHTML = `RM ${total.toFixed(2)}`;
             lastCalc = { vehicle, distance, pickupStr, helpers, tailgate, dropPoints, total };
             document.getElementById('downloadBtn').style.display = 'block';
@@ -283,7 +272,7 @@
             doc.save('quotation_summary.pdf');
         }
 
-        // Admin panel (5 clicks) – with safety check
+        // Admin panel (5 clicks)
         let clickCount = 0, clickTimer = null;
         const versionDiv = document.getElementById('versionClick');
         const adminPanelDiv = document.getElementById('adminPanel');
@@ -293,7 +282,7 @@
             clickTimer = setTimeout(() => { clickCount = 0; }, 1000);
             if (clickCount >= 5) {
                 if (!currentRates || !currentRates.vehicleRates) {
-                    alert('Rates not loaded yet or invalid structure. Please wait or refresh.');
+                    alert('Rates not loaded yet. Please wait or refresh.');
                     clickCount = 0;
                     return;
                 }
@@ -310,13 +299,11 @@
             for (const [veh, data] of Object.entries(currentRates.vehicleRates)) {
                 html += `<div class="admin-row"><label>${veh} Base Km:</label><input type="number" id="baseKm_${veh}" value="${data.baseKm}" step="1"></div>`;
                 html += `<div class="admin-row"><label>${veh} Base Price:</label><input type="number" id="basePrice_${veh}" value="${data.basePrice}" step="5"></div>`;
-                if (data.extraTiers && Array.isArray(data.extraTiers)) {
-                    data.extraTiers.forEach((tier, idx) => {
-                        const upToVal = (tier.upTo === Infinity || tier.upTo > 99999) ? '100000' : tier.upTo;
-                        html += `<div class="admin-row"><label>${veh} Tier${idx+1} upTo (km):</label><input type="number" id="tierUpTo_${veh}_${idx}" value="${upToVal}" step="10"></div>`;
-                        html += `<div class="admin-row"><label>${veh} Tier${idx+1} rate (RM):</label><input type="number" id="tierRate_${veh}_${idx}" value="${tier.rate}" step="0.5"></div>`;
-                    });
-                }
+                data.extraTiers.forEach((tier, idx) => {
+                    const upToVal = (tier.upTo === Infinity || tier.upTo > 99999) ? '100000' : tier.upTo;
+                    html += `<div class="admin-row"><label>${veh} Tier${idx+1} upTo (km):</label><input type="number" id="tierUpTo_${veh}_${idx}" value="${upToVal}" step="10"></div>`;
+                    html += `<div class="admin-row"><label>${veh} Tier${idx+1} rate (RM):</label><input type="number" id="tierRate_${veh}_${idx}" value="${tier.rate}" step="0.5"></div>`;
+                });
             }
             html += `<div class="admin-row"><label>Helper Price:</label><input type="number" id="helperPrice" value="${currentRates.helperPrice}" step="5"></div>`;
             html += `<div class="admin-row"><label>Tailgate Price:</label><input type="number" id="tailgatePrice" value="${currentRates.tailgatePrice}" step="5"></div>`;
@@ -381,7 +368,7 @@
             const ratesForStorage = JSON.parse(JSON.stringify(newRates));
             for (const veh in ratesForStorage.vehicleRates) {
                 const tiers = ratesForStorage.vehicleRates[veh].extraTiers;
-                if (tiers && Array.isArray(tiers)) {
+                if (tiers) {
                     for (let i = 0; i < tiers.length; i++) {
                         if (tiers[i].upTo === Infinity) tiers[i].upTo = 100000;
                     }
@@ -393,7 +380,9 @@
             errorDiv.style.display = 'none';
             successDiv.style.display = 'none';
             try {
+                // Important: encode the JSON payload as a URI component
                 const url = `${WRITE_API_URL}?data=${encodeURIComponent(payload)}`;
+                console.log("Saving to:", url); // debug
                 const response = await fetch(url);
                 const result = await response.json();
                 if (result.success) {
@@ -405,7 +394,7 @@
                 }
             } catch (err) {
                 errorDiv.style.display = 'block';
-                errorDiv.innerText = `❌ Failed to save: ${err.message}. Check WRITE URL.`;
+                errorDiv.innerText = `❌ Failed to save: ${err.message}. Check WRITE URL and payload.`;
             }
         });
 
@@ -431,7 +420,7 @@
             const ratesCopy = JSON.parse(JSON.stringify(rates));
             for (const veh in ratesCopy.vehicleRates) {
                 const tiers = ratesCopy.vehicleRates[veh].extraTiers;
-                if (tiers && Array.isArray(tiers)) {
+                if (tiers) {
                     for (let i = 0; i < tiers.length; i++) {
                         if (tiers[i].upTo === Infinity) tiers[i].upTo = 100000;
                     }
@@ -471,7 +460,7 @@ async function loadRates() {
         if (!currentRates || !currentRates.vehicleRates) throw new Error('Invalid structure');
         for (const veh in currentRates.vehicleRates) {
             const tiers = currentRates.vehicleRates[veh].extraTiers;
-            if (tiers && Array.isArray(tiers)) {
+            if (tiers) {
                 for (let i=0; i<tiers.length; i++) if (tiers[i].upTo === 100000) tiers[i].upTo = Infinity;
             }
         }
