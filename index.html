@@ -107,8 +107,8 @@
     <script>
         // ==================== CLOUD URLs ====================
         // ⬇️ REPLACE WITH YOUR ACTUAL DEPLOYED WEB APP URLs ⬇️
-        const READ_API_URL = "https://script.google.com/macros/s/AKfycbwKCaWULAJHQc5cQDJILuOb_QDJxBbukIAfGZgpl387vos1W_IVd6GBnuWQx7PsRJYJ/exec";
-        const WRITE_API_URL = "https://script.google.com/macros/s/AKfycbxAcM_0oru4nG8s45WkOk_Lv145qg7MPOBS2J9aPFgBjIZkR440Vnc1K6DRfbjNOBgq/exec";
+        const READ_API_URL = "https://script.google.com/macros/s/AKfycby0h3N6yAeIPWNF9L3iQP53jDUmx9-g4ZUj1iVgFpBxtRDQGldYgmTiKJLTXk_FeTrA/exec";   // doGet from code.gs
+        const WRITE_API_URL = "https://script.google.com/macros/s/AKfycbw2fo7_JbcASzvDX8YpkaORC08rAzlJlxDybDocwlRxoYztAuLRvIrgkvVmQ8521A_R/exec";      // GET-based writer from saveRates.gs
 
         let currentRates = null;
 
@@ -277,7 +277,7 @@
             doc.save('quotation_summary.pdf');
         }
 
-        // Admin panel (5 clicks) – now with safety check
+        // Admin panel (5 clicks) – with safety check
         let clickCount = 0, clickTimer = null;
         const versionDiv = document.getElementById('versionClick');
         const adminPanelDiv = document.getElementById('adminPanel');
@@ -367,6 +367,7 @@
             return newRates;
         }
 
+        // ========== PUSH TO CLOUD (GET‑based, no CORS preflight) ==========
         document.getElementById('pushToCloudBtn').addEventListener('click', async () => {
             const newRates = collectRatesFromForm();
             const ratesForStorage = JSON.parse(JSON.stringify(newRates));
@@ -382,23 +383,20 @@
             errorDiv.style.display = 'none';
             successDiv.style.display = 'none';
             try {
-                const response = await fetch(WRITE_API_URL, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: payload
-                });
+                // GET request with query parameter – no preflight, no CORS issues
+                const url = `${WRITE_API_URL}?data=${encodeURIComponent(payload)}`;
+                const response = await fetch(url);
                 const result = await response.json();
                 if (result.success) {
                     successDiv.style.display = 'block';
-                    successDiv.innerText = '✅ Rates successfully saved to Google Sheet! Reloading...';
+                    successDiv.innerText = '✅ Rates saved to Google Sheet! Reloading...';
                     setTimeout(() => location.reload(), 1500);
                 } else {
                     throw new Error(result.error || 'Unknown error');
                 }
             } catch (err) {
                 errorDiv.style.display = 'block';
-                errorDiv.innerText = `❌ Failed to save to cloud: ${err.message}. Check WRITE URL and CORS.`;
+                errorDiv.innerText = `❌ Failed to save: ${err.message}. Check WRITE URL.`;
             }
         });
 
