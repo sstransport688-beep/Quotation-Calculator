@@ -119,11 +119,17 @@
                 const response = await fetch(READ_API_URL);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 currentRates = await response.json();
+                // Validate that the loaded object has the required structure
+                if (!currentRates || typeof currentRates !== 'object' || !currentRates.vehicleRates) {
+                    throw new Error('Invalid rates structure received from cloud');
+                }
                 // Convert 100000 back to Infinity for extraTiers
                 for (const veh in currentRates.vehicleRates) {
                     const tiers = currentRates.vehicleRates[veh].extraTiers;
-                    for (let i = 0; i < tiers.length; i++) {
-                        if (tiers[i].upTo === 100000) tiers[i].upTo = Infinity;
+                    if (tiers && Array.isArray(tiers)) {
+                        for (let i = 0; i < tiers.length; i++) {
+                            if (tiers[i].upTo === 100000) tiers[i].upTo = Infinity;
+                        }
                     }
                 }
                 loadingDiv.style.display = 'none';
@@ -286,8 +292,8 @@
             if (clickTimer) clearTimeout(clickTimer);
             clickTimer = setTimeout(() => { clickCount = 0; }, 1000);
             if (clickCount >= 5) {
-                if (!currentRates) {
-                    alert('Rates not loaded yet. Please wait for the page to finish loading.');
+                if (!currentRates || !currentRates.vehicleRates) {
+                    alert('Rates not loaded yet or invalid structure. Please wait or refresh.');
                     clickCount = 0;
                     return;
                 }
@@ -298,17 +304,19 @@
         });
 
         function renderAdminFields() {
-            if (!currentRates) return;
+            if (!currentRates || !currentRates.vehicleRates) return;
             const container = document.getElementById('adminFields');
             let html = `<div class="admin-row"><strong>Current Rates (editable)</strong></div>`;
             for (const [veh, data] of Object.entries(currentRates.vehicleRates)) {
                 html += `<div class="admin-row"><label>${veh} Base Km:</label><input type="number" id="baseKm_${veh}" value="${data.baseKm}" step="1"></div>`;
                 html += `<div class="admin-row"><label>${veh} Base Price:</label><input type="number" id="basePrice_${veh}" value="${data.basePrice}" step="5"></div>`;
-                data.extraTiers.forEach((tier, idx) => {
-                    const upToVal = (tier.upTo === Infinity || tier.upTo > 99999) ? '100000' : tier.upTo;
-                    html += `<div class="admin-row"><label>${veh} Tier${idx+1} upTo (km):</label><input type="number" id="tierUpTo_${veh}_${idx}" value="${upToVal}" step="10"></div>`;
-                    html += `<div class="admin-row"><label>${veh} Tier${idx+1} rate (RM):</label><input type="number" id="tierRate_${veh}_${idx}" value="${tier.rate}" step="0.5"></div>`;
-                });
+                if (data.extraTiers && Array.isArray(data.extraTiers)) {
+                    data.extraTiers.forEach((tier, idx) => {
+                        const upToVal = (tier.upTo === Infinity || tier.upTo > 99999) ? '100000' : tier.upTo;
+                        html += `<div class="admin-row"><label>${veh} Tier${idx+1} upTo (km):</label><input type="number" id="tierUpTo_${veh}_${idx}" value="${upToVal}" step="10"></div>`;
+                        html += `<div class="admin-row"><label>${veh} Tier${idx+1} rate (RM):</label><input type="number" id="tierRate_${veh}_${idx}" value="${tier.rate}" step="0.5"></div>`;
+                    });
+                }
             }
             html += `<div class="admin-row"><label>Helper Price:</label><input type="number" id="helperPrice" value="${currentRates.helperPrice}" step="5"></div>`;
             html += `<div class="admin-row"><label>Tailgate Price:</label><input type="number" id="tailgatePrice" value="${currentRates.tailgatePrice}" step="5"></div>`;
@@ -373,8 +381,10 @@
             const ratesForStorage = JSON.parse(JSON.stringify(newRates));
             for (const veh in ratesForStorage.vehicleRates) {
                 const tiers = ratesForStorage.vehicleRates[veh].extraTiers;
-                for (let i = 0; i < tiers.length; i++) {
-                    if (tiers[i].upTo === Infinity) tiers[i].upTo = 100000;
+                if (tiers && Array.isArray(tiers)) {
+                    for (let i = 0; i < tiers.length; i++) {
+                        if (tiers[i].upTo === Infinity) tiers[i].upTo = 100000;
+                    }
                 }
             }
             const payload = JSON.stringify(ratesForStorage);
@@ -383,7 +393,6 @@
             errorDiv.style.display = 'none';
             successDiv.style.display = 'none';
             try {
-                // GET request with query parameter – no preflight, no CORS issues
                 const url = `${WRITE_API_URL}?data=${encodeURIComponent(payload)}`;
                 const response = await fetch(url);
                 const result = await response.json();
@@ -422,8 +431,10 @@
             const ratesCopy = JSON.parse(JSON.stringify(rates));
             for (const veh in ratesCopy.vehicleRates) {
                 const tiers = ratesCopy.vehicleRates[veh].extraTiers;
-                for (let i = 0; i < tiers.length; i++) {
-                    if (tiers[i].upTo === Infinity) tiers[i].upTo = 100000;
+                if (tiers && Array.isArray(tiers)) {
+                    for (let i = 0; i < tiers.length; i++) {
+                        if (tiers[i].upTo === Infinity) tiers[i].upTo = 100000;
+                    }
                 }
             }
             const ratesJson = JSON.stringify(ratesCopy);
@@ -457,9 +468,12 @@ async function loadRates() {
         const res = await fetch("${readUrl}");
         if (!res.ok) throw new Error(\`HTTP \${res.status}\`);
         currentRates = await res.json();
+        if (!currentRates || !currentRates.vehicleRates) throw new Error('Invalid structure');
         for (const veh in currentRates.vehicleRates) {
             const tiers = currentRates.vehicleRates[veh].extraTiers;
-            for (let i=0; i<tiers.length; i++) if (tiers[i].upTo === 100000) tiers[i].upTo = Infinity;
+            if (tiers && Array.isArray(tiers)) {
+                for (let i=0; i<tiers.length; i++) if (tiers[i].upTo === 100000) tiers[i].upTo = Infinity;
+            }
         }
         loading.style.display = 'none';
         updateDisplays();
